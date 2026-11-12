@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Paakat · Guía turística inteligente</title>
-<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/styles.css?v=2">
 </head>
 <body>
 <div class="page">
@@ -95,261 +95,28 @@
 
 </div>
 
-<script>
-  const $ = (id) => document.getElementById(id);
+<button type="button" id="chatToggle" class="chat-toggle" aria-expanded="false" aria-controls="chatPanel">Guía</button>
 
-  const API_PORT = "8010";
-  const STORED_API = localStorage.getItem("paakat_api");
-  const DEFAULT_API = STORED_API || (
-    location.protocol.startsWith("http")
-      ? location.protocol + "//" + location.hostname + ":" + API_PORT
-      : "http://127.0.0.1:" + API_PORT
-  );
+<section id="chatPanel" class="chat-panel" aria-labelledby="chatTitle" hidden>
+  <header class="chat-head">
+    <div>
+      <h2 id="chatTitle">Guía Paakat</h2>
+      <p>Pregunta por sitios y culturas</p>
+    </div>
+    <button type="button" id="chatClose" class="chat-close" aria-label="Cerrar chat">&times;</button>
+  </header>
+  <div id="chatLog" class="chat-log" role="log" aria-live="polite">
+    <div class="chat-msg bot">Hola, soy tu guía. Pregúntame por un sitio arqueológico, una cultura o cómo usar Paakat.</div>
+  </div>
+  <form id="chatForm" class="chat-form">
+    <input id="chatInput" class="chat-input" type="text" placeholder="Escribe tu pregunta…" autocomplete="off" aria-label="Mensaje">
+    <button type="submit" id="chatSend" class="chat-send">Enviar</button>
+  </form>
+</section>
 
-  let stream = null;
-  let blob = null;
-  let blobName = "captura.jpg";
-  let previewUrl = null;
-
-  function apiBase() {
-    const value = ($("apiBase").value || DEFAULT_API).trim();
-    return value.replace(/\/+$/, "");
-  }
-
-  function showHint(text, isError) {
-    const hint = $("hint");
-    hint.textContent = text;
-    hint.classList.toggle("error", !!isError);
-  }
-
-  function escapeHtml(value) {
-    return String(value == null ? "" : value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
-
-  function deviceId() {
-    let id = localStorage.getItem("paakat_device");
-    if (!id) {
-      id = "web-" + (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
-      localStorage.setItem("paakat_device", id);
-    }
-    return id;
-  }
-
-  async function startCamera() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      showHint("Este navegador no permite abrir la cámara. Usa Subir imagen.", true);
-      return;
-    }
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
-        audio: false
-      });
-      const video = $("video");
-      video.srcObject = stream;
-      video.hidden = false;
-      $("preview").hidden = true;
-      $("placeholder").hidden = true;
-      await video.play();
-      $("btnCapture").disabled = false;
-      $("btnCamera").disabled = true;
-      $("btnCamera").textContent = "Cámara activa";
-      showHint("Encuadra el monumento y pulsa “Tomar foto”.");
-    } catch (err) {
-      showHint("No se pudo abrir la cámara: " + err.message + ". Puedes subir una imagen.", true);
-    }
-  }
-
-  function capture() {
-    const video = $("video");
-    if (!video.videoWidth) {
-      showHint("La cámara aún no está lista. Espera un momento e inténtalo de nuevo.", true);
-      return;
-    }
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext("2d").drawImage(video, 0, 0);
-    canvas.toBlob((result) => {
-      if (result) setBlob(result, "captura.jpg");
-    }, "image/jpeg", 0.92);
-  }
-
-  function setBlob(nextBlob, name) {
-    blob = nextBlob;
-    blobName = name || "captura.jpg";
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    previewUrl = URL.createObjectURL(nextBlob);
-    $("preview").src = previewUrl;
-    $("preview").hidden = false;
-    $("video").hidden = true;
-    $("placeholder").hidden = true;
-    $("btnRecognize").disabled = false;
-    showHint("Foto lista. Pulsa “Reconocer sitio”.");
-  }
-
-  async function recognize() {
-    if (!blob) {
-      showHint("Primero toma o sube una foto.", true);
-      return;
-    }
-    const button = $("btnRecognize");
-    const previous = button.textContent;
-    button.disabled = true;
-    button.textContent = "Analizando…";
-    showHint("Consultando el modelo…");
-    try {
-      const form = new FormData();
-      form.append("file", blob, blobName);
-      form.append("device_id", deviceId());
-      const response = await fetch(apiBase() + "/api/v1/recognize", { method: "POST", body: form });
-      if (!response.ok) {
-        const detail = await response.text();
-        throw new Error("HTTP " + response.status + " · " + detail.slice(0, 160));
-      }
-      const data = await response.json();
-      renderResult(data);
-      loadHistory();
-    } catch (err) {
-      showHint("Error al reconocer: " + err.message, true);
-    } finally {
-      button.disabled = false;
-      button.textContent = previous;
-    }
-  }
-
-  function renderResult(data) {
-    const card = $("resultCard");
-    const element = data.element;
-    const confidence = Math.max(0, Math.min(1, Number(data.confidence) || 0));
-    const pct = Math.round(confidence * 100);
-
-    $("resName").textContent = element ? element.name : (data.label || "Desconocido");
-    $("resCategory").textContent = element && element.category ? element.category.name : "Sin categoría";
-    $("confText").textContent = pct + "%";
-
-    const bar = $("confBar");
-    bar.style.width = pct + "%";
-    bar.className = confidence >= 0.7 ? "ok" : confidence >= 0.45 ? "mid" : "low";
-
-    const badge = $("statusBadge");
-    badge.textContent = data.recognized ? "Sitio identificado" : "Coincidencia baja";
-    badge.className = "tag " + (data.recognized ? "ok" : "warn");
-
-    const meta = $("resMeta");
-    meta.innerHTML = "";
-    const rows = [
-      ["Ubicación", element ? element.location : null],
-      ["Época", element ? element.era : null]
-    ];
-    rows.forEach(([label, value]) => {
-      if (!value) return;
-      const dt = document.createElement("dt");
-      dt.textContent = label;
-      const dd = document.createElement("dd");
-      dd.textContent = value;
-      meta.appendChild(dt);
-      meta.appendChild(dd);
-    });
-
-    $("resDesc").textContent = (element && element.description) || "Sin descripción disponible.";
-
-    const list = $("candidates");
-    list.innerHTML = "";
-    (data.top_k || []).forEach((candidate) => {
-      const candidatePct = Math.round((Number(candidate.confidence) || 0) * 100);
-      const item = document.createElement("li");
-      const label = document.createElement("span");
-      label.className = "cand-label";
-      label.textContent = candidate.label;
-      const track = document.createElement("span");
-      track.className = "cand-bar";
-      const fill = document.createElement("i");
-      fill.style.width = candidatePct + "%";
-      track.appendChild(fill);
-      const value = document.createElement("span");
-      value.className = "cand-pct";
-      value.textContent = candidatePct + "%";
-      item.appendChild(label);
-      item.appendChild(track);
-      item.appendChild(value);
-      list.appendChild(item);
-    });
-
-    card.hidden = false;
-    card.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  async function loadHistory() {
-    const list = $("history");
-    try {
-      const response = await fetch(apiBase() + "/api/v1/recognitions?limit=6");
-      if (!response.ok) throw new Error("HTTP " + response.status);
-      const rows = await response.json();
-      if (!rows.length) {
-        list.innerHTML = '<li class="placeholder-row">Aún no hay reconocimientos.</li>';
-        return;
-      }
-      list.innerHTML = rows.map((row, index) => {
-        const pct = Math.round((Number(row.confidence) || 0) * 100);
-        const when = row.created_at ? new Date(row.created_at).toLocaleString("es-MX") : "";
-        const number = String(index + 1).padStart(2, "0");
-        return '<li><span class="idx">' + number + "</span>" +
-          '<div><span class="name">' + escapeHtml(row.label) + "</span>" +
-          "<time>" + escapeHtml(when) + "</time></div>" +
-          '<span class="pct">' + pct + "%</span></li>";
-      }).join("");
-    } catch (err) {
-      list.innerHTML = '<li class="placeholder-row">No se pudo cargar el registro.</li>';
-    }
-  }
-
-  async function checkHealth() {
-    const badge = $("netBadge");
-    try {
-      const response = await fetch(apiBase() + "/health");
-      if (!response.ok) throw new Error("HTTP " + response.status);
-      const health = await response.json();
-      if (health.status === "ok") {
-        badge.textContent = health.model_loaded ? "API y modelo listos" : "API lista · modelo cargando";
-        badge.className = "status ok";
-      } else {
-        badge.textContent = "API degradada";
-        badge.className = "status warn";
-      }
-    } catch (err) {
-      badge.textContent = "Sin conexión";
-      badge.className = "status err";
-    }
-  }
-
-  $("btnCamera").addEventListener("click", startCamera);
-  $("btnCapture").addEventListener("click", capture);
-  $("btnRecognize").addEventListener("click", recognize);
-  $("btnRefresh").addEventListener("click", () => {
-    checkHealth();
-    loadHistory();
-  });
-
-  $("fileInput").addEventListener("change", (event) => {
-    const file = event.target.files && event.target.files[0];
-    if (file) setBlob(file, file.name);
-  });
-
-  $("apiBase").value = DEFAULT_API;
-  $("apiBase").addEventListener("change", () => {
-    localStorage.setItem("paakat_api", $("apiBase").value.trim());
-    checkHealth();
-    loadHistory();
-  });
-
-  checkHealth();
-  loadHistory();
-</script>
+<script src="js/config.js"></script>
+<script src="js/core.js"></script>
+<script src="js/recognition.js"></script>
+<script src="js/chat.js"></script>
 </body>
 </html>

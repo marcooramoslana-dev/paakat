@@ -1,0 +1,3 @@
+window.PAAKAT_CONFIG = {
+  GROQ_KEY: "TU_GROQ_API_KEY_AQUI"
+};

@@ -1,0 +1,11 @@
+# Configuracion local con secretos (no subir)
+web/js/config.js
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node
+node_modules/
