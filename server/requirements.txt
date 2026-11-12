@@ -1,0 +1,17 @@
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+sqlalchemy>=2.0,<2.1
+pymysql>=1.1
+cryptography>=42
+# pydantic 2.11+ falla al generar el esquema OpenAPI en Python 3.9
+# (bug de typing-inspection con Literal anidados). Usar 2.10.x en Python 3.9.
+pydantic>=2.10,<2.11
+pydantic-settings>=2.2,<3.0
+transformers>=4.40,<4.46
+pillow>=10.0
+numpy>=1.24
+
+# PyTorch se instala por separado para controlar la variante (CPU o CUDA):
+#   CPU:  pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   CUDA: pip install torch --index-url https://download.pytorch.org/whl/cu121
